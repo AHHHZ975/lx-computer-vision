@@ -40,6 +40,12 @@ class LaneServoingNode(DTROS):
 
         self.v_0 = 0.3  # Forward velocity command
 
+        ########## Added control parameters ##################
+        self.linear_velocity = 0.05 # The constant linear velocity 
+        self.straight_ratio = 0.6   # A ratio that balances the power of the left and right steers
+        self.gain_ratio = 0.55      # A ratio that will be multiplied to reduce or increase the final steer value
+        self.steer_sign = 0         # A boolean that determines whether the robot should turn left or right
+
         # The following are used for scaling
         self.steer_max = -1
 
@@ -53,7 +59,12 @@ class LaneServoingNode(DTROS):
         self.VLS_ACTION = None
         self.VLS_STOPPED = True
 
-        # Defining subscribers:
+        # I added a ros subscriber/publisher to monitor and initialized the control parameters
+        # have been added in the "__init__" function of this class.
+        rospy.Subscriber(f"/{self.veh}/manual_parameter_tuning", String, self.cb_manual_parameter_tuning)
+
+
+       # Defining subscribers:
         rospy.Subscriber(
             f"/{self.veh}/rectifier_node/image/compressed",
             CompressedImage,
@@ -86,6 +97,23 @@ class LaneServoingNode(DTROS):
 
         self.loginfo("Initialized!")
 
+    # This the callback function that I added to initialize the manual control parameters.
+    # The callback will be passed to the subscriber "manual_parameter_tuning" and on the other
+    # side, there will be a python script that plays the publisher node. (The python script is in the
+    # directory of this project and it is called "parameter_publisher")
+    def cb_manual_parameter_tuning(self, msg):
+        # Assume the msg is a string with values separated by commas
+        values = msg.data.split(',')
+        if len(values) == 4:
+            self.straight_ratio = float(values[0])
+            self.gain_ratio = float(values[1])
+            self.linear_velocity = float(values[2])
+            self.steer_sign = int(values[3])
+            self.v_0 = self.linear_velocity
+            self.loginfo(f"Received new parameters: {values}")
+        else:
+            self.logwarn("Received incorrect parameters input format.")
+
 
     def cb_action(self, msg):
         """
@@ -110,6 +138,15 @@ class LaneServoingNode(DTROS):
                 "you are working with the simulator. Turn the robot (in place), to the left "
                 "then to the right by about 30deg on each side. Press [Go] when done."
             )
+            
+            ###### I added the following parameters to initialize the control parameters
+            ##### during the test with the Duckiematrix
+
+            # self.straight_ratio = float(input("Enter the straight ration:"))
+            # self.gain_ratio = float(input("Enter the gain ration:"))
+            # self.linear_velocity = float(input("Enter the liner velocity:"))
+            # self.steer_sign = int(input("Enter the steer sign:"))
+            self.v_0 = self.linear_velocity
             return
 
         if self.VLS_ACTION == "go":
@@ -137,6 +174,7 @@ class LaneServoingNode(DTROS):
             image_msg (:obj:`sensor_msgs.msg.CompressedImage`): The received image message
 
         """
+
         image = compressed_imgmsg_to_rgb(image_msg)
         # Resize the image to the desired dimensionsS
         height_original, width_original = image.shape[0:2]
@@ -177,8 +215,7 @@ class LaneServoingNode(DTROS):
         if self.VLS_ACTION == "calibration":
             self.steer_max = max(
                 self.steer_max,
-                2
-                * max(
+                2 * max(
                     float(np.sum(lt_mask * steer_matrix_left_lm)),
                     float(np.sum(rt_mask * steer_matrix_right_lm)),
                 ),
@@ -191,12 +228,23 @@ class LaneServoingNode(DTROS):
             self.logerr("Not Calibrated!")
             return
 
-        steer = float(np.sum(lt_mask * steer_matrix_left_lm)) + float(np.sum(rt_mask * steer_matrix_right_lm))
+        ### Steer left and right
+        _steer__left = float(np.sum(lt_mask * steer_matrix_left_lm)) * self.gain_ratio
+        _steer__right = float(np.sum(rt_mask * steer_matrix_right_lm)) * self.straight_ratio * self.gain_ratio 
+        # self.loginfo(f"Left/Right Ratio: {_steer__left/_steer__right}")
+
+        ### Whether turn left or right
+        if self.steer_sign == 1:
+            steer = _steer__left - _steer__right
+        else: 
+            steer = _steer__right - _steer__left
+
 
         # now rescale from 0 to 1
         steer_scaled = np.sign(steer) * rescale(min(np.abs(steer), self.steer_max), 0, self.steer_max)
-
+        
         u = [self.v_0, steer_scaled * self.omega_max]
+
         self.publish_command(u)
 
         # self.logging to screen for debugging purposes
