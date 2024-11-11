@@ -4,6 +4,12 @@
 
 # **Learning Experience (LX): Computer Vision **
 
+You can watch: 
+
+1- The qualitative results of lane detection and lane following experiments on the real Duckiebot [here](https://www.youtube.com/watch?v=AsqGkIGHRz4).
+
+2- The qualitative results of lane detection and lane following experiments on the virtual Duckiebot in the Duckiematrix environment [here](https://www.youtube.com/watch?v=nRQGz7mNXkY).
+
 
 # Instructions
 
