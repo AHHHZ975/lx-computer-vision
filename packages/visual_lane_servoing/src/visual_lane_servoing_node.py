@@ -100,7 +100,7 @@ class LaneServoingNode(DTROS):
     # This the callback function that I added to initialize the manual control parameters.
     # The callback will be passed to the subscriber "manual_parameter_tuning" and on the other
     # side, there will be a python script that plays the publisher node. (The python script is in the
-    # directory of this project and it is called "parameter_publisher")
+    # directory of this project and it is called "parameter_publisher.py")
     def cb_manual_parameter_tuning(self, msg):
         # Assume the msg is a string with values separated by commas
         values = msg.data.split(',')
